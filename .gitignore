@@ -24,3 +24,7 @@ __pycache__/
 # Operating System
 .DS_Store
 Thumbs.db
+
+# Ignore instance DB and local sqlite files
+instance/
+*.db
