@@ -10,22 +10,25 @@
         body {
             margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #ecf0f1;
+            background-color: rgb(232, 233, 235);
         }
         
         .navbar {
-            background-color: #2c3e50;
+            background-color: rgb(144, 151, 174);
             color: white;
             padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgb(0,0,0,0.1);
         }
         
-        .navbar h1 {
+       .navbar h1 {
             margin: 0;
             font-size: 24px;
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-weight: 600; 
+            letter-spacing: 0.5px; 
         }
         
         .navbar-right {
@@ -123,7 +126,7 @@
 <body>
     <!-- Navigation Bar -->
     <nav class="navbar">
-        <h1>🔒 LogCloud Dashboard</h1>
+        <h1>LogCloud Dashboard</h1>
         <div class="navbar-right">
             <span class="user-info">Welcome, <strong>{{ username }}</strong></span>
             <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
@@ -146,7 +149,7 @@
         <!-- Welcome Card -->
         <div class="welcome-card">
             <h2>Welcome to LogCloud Centralized Monitoring</h2>
-            <p>Monitor your network devices, detect threats, and manage security alerts from this dashboard.</p>
+            <p>Monitor your logs detect threats, and manage security alerts from this dashboard.</p>
         </div>
         
         <!-- Statistics Grid -->
@@ -172,17 +175,6 @@
             </div>
         </div>
         
-        <!-- Coming Soon Section -->
-        <div class="welcome-card">
-            <h2>🚧 Coming Soon</h2>
-            <ul>
-                <li>Real-time log monitoring</li>
-                <li>Threat detection dashboard</li>
-                <li>Alert management system</li>
-                <li>Device registration</li>
-                <li>Log search and filtering</li>
-            </ul>
-        </div>
     </div>
 </body>
 </html>
