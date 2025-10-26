@@ -416,7 +416,8 @@ def search_logs():
         query = query.filter_by(isFlagged=True)
     
     if search_query:
-        query = query.filter(LogEntry.message.contains(search_query))
+        # Use case-insensitive LIKE to avoid analyzer issues and perform substring matching
+        query = query.filter(LogEntry.message.ilike(f"%{search_query}%"))
     
     logs = query.order_by(LogEntry.timestamp.desc()).all()
     devices = Device.query.all()
