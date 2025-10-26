@@ -172,39 +172,264 @@ class LogCollector:
 
 
 class LogParser:
-    """Parses raw log data into a simple structured format."""
+    """Enhanced parser that supports multiple common log formats."""
 
     @staticmethod
     def parse_log(raw_log: str) -> dict:
+        """
+        Auto-detect and parse common log formats.
+        Supports: Syslog, Apache/Nginx, Windows Event, Firewall, Generic logs
+        
+        Args:
+            raw_log (str): Raw log string
+            
+        Returns:
+            dict: Parsed log data with ipAddress, severity, message
+        """
+        # Try different parsers in order
+        parsers = [
+            LogParser._parse_syslog,
+            LogParser._parse_apache_nginx,
+            LogParser._parse_windows_event,
+            LogParser._parse_firewall,
+            LogParser._parse_generic
+        ]
+        
+        for parser in parsers:
+            result = parser(raw_log)
+            if result:
+                return result
+        
+        # Fallback to generic if nothing matches
+        return LogParser._parse_generic(raw_log)
+    
+    @staticmethod
+    def _parse_syslog(raw_log: str):
+        """
+        Parse RFC 3164/5424 Syslog format
+        Examples:
+        - <34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick
+        - Oct 26 15:30:01 router1 sshd[1234]: Failed password for admin from 192.168.1.100
+        """
+        # Pattern for syslog with priority
+        syslog_priority = r'^<(\d+)>'
+        # Pattern for standard syslog
+        syslog_pattern = r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+(\S+?)(\[\d+\])?\s*:\s*(.+)$'
+        
+        # Remove priority if present
+        log_content = re.sub(syslog_priority, '', raw_log)
+        
+        match = re.match(syslog_pattern, log_content.strip())
+        if match:
+            timestamp, hostname, process, pid, message = match.groups()
+            
+            return {
+                'ipAddress': LogParser._extract_ip(message),
+                'severity': LogParser._determine_severity(message),
+                'message': message.strip(),
+                'format': 'syslog',
+                'hostname': hostname,
+                'process': process
+            }
+        return None
+    
+    @staticmethod
+    def _parse_apache_nginx(raw_log: str):
+        """
+        Parse Apache/Nginx access logs
+        Example: 192.168.1.100 - - [26/Oct/2024:15:30:01 +0000] "GET /admin HTTP/1.1" 404 512
+        """
+        # Combined Log Format pattern
+        apache_pattern = r'^(\S+)\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)\s+\S+"\s+(\d{3})\s+(\d+)'
+        
+        match = re.match(apache_pattern, raw_log)
+        if match:
+            ip, timestamp, method, url, status_code, size = match.groups()
+            
+            # Determine severity based on status code
+            status = int(status_code)
+            if status >= 500:
+                severity = 'error'
+            elif status >= 400:
+                severity = 'warning'
+            else:
+                severity = 'info'
+            
+            message = f"{method} {url} - Status {status_code}"
+            
+            return {
+                'ipAddress': ip,
+                'severity': severity,
+                'message': message,
+                'format': 'apache/nginx',
+                'status_code': status_code,
+                'url': url
+            }
+        return None
+    
+    @staticmethod
+    def _parse_windows_event(raw_log: str):
+        """
+        Parse Windows Event Log format
+        Example: Event ID: 4625, Level: Error, Source: Security, Message: An account failed to log on
+        """
+        # Look for Windows Event patterns
+        event_pattern = r'Event ID:\s*(\d+).*?Level:\s*(\w+).*?Message:\s*(.+?)(?:\s*$|\s*,)'
+        
+        match = re.search(event_pattern, raw_log, re.IGNORECASE | re.DOTALL)
+        if match:
+            event_id, level, message = match.groups()
+            
+            # Map Windows levels to our severity
+            severity_map = {
+                'critical': 'critical',
+                'error': 'error',
+                'warning': 'warning',
+                'information': 'info',
+                'info': 'info'
+            }
+            severity = severity_map.get(level.lower(), 'info')
+            
+            return {
+                'ipAddress': LogParser._extract_ip(raw_log),
+                'severity': severity,
+                'message': message.strip(),
+                'format': 'windows_event',
+                'event_id': event_id
+            }
+        return None
+    
+    @staticmethod
+    def _parse_firewall(raw_log: str):
+        """
+        Parse firewall logs (pfSense, iptables, etc.)
+        Examples:
+        - iptables: IN=eth0 OUT= SRC=192.168.1.100 DST=10.0.0.1 PROTO=TCP SPT=54321 DPT=22
+        - pfSense: TCP:S SRC=192.168.1.100:12345 DST=10.0.0.1:80 [BLOCKED]
+        """
+        # iptables pattern
+        iptables_pattern = r'SRC=([\d.]+)\s+DST=([\d.]+).*?DPT=(\d+)'
+        match = re.search(iptables_pattern, raw_log)
+        if match:
+            src_ip, dst_ip, dst_port = match.groups()
+            
+            # Check if blocked/dropped
+            if re.search(r'\b(block|drop|deny|reject)\b', raw_log, re.IGNORECASE):
+                severity = 'warning'
+                action = 'BLOCKED'
+            else:
+                severity = 'info'
+                action = 'ALLOWED'
+            
+            message = f"Firewall {action}: {src_ip} → {dst_ip}:{dst_port}"
+            
+            return {
+                'ipAddress': src_ip,
+                'severity': severity,
+                'message': message,
+                'format': 'firewall',
+                'dst_ip': dst_ip,
+                'dst_port': dst_port
+            }
+        
+        # Generic firewall format with BLOCKED/DROPPED
+        if re.search(r'\b(block|drop|deny|reject)\b', raw_log, re.IGNORECASE):
+            return {
+                'ipAddress': LogParser._extract_ip(raw_log),
+                'severity': 'warning',
+                'message': raw_log.strip(),
+                'format': 'firewall'
+            }
+        
+        return None
+    
+    @staticmethod
+    def _parse_generic(raw_log: str) -> dict:
+        """
+        Generic parser for unrecognized formats.
+        Extracts IP and determines severity by keywords.
+        """
         parsing_data = {
-            'ipAddress': None,
-            'severity': 'info',
-            'message': raw_log,
+            'ipAddress': LogParser._extract_ip(raw_log),
+            'severity': LogParser._determine_severity(raw_log),
+            'message': raw_log.strip(),
+            'format': 'generic'
         }
-
-        # Extract IPv4 address if present
-        ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
-        ip_match = re.search(ip_pattern, raw_log)
-        if ip_match:
-            parsing_data['ipAddress'] = ip_match.group()
-
-        # Determine severity by keywords
-        raw_lower = raw_log.lower()
-        if 'critical' in raw_lower or 'fatal' in raw_lower:
-            parsing_data['severity'] = 'critical'
-        elif 'error' in raw_lower or 'fail' in raw_lower:
-            parsing_data['severity'] = 'error'
-        elif 'warn' in raw_lower:
-            parsing_data['severity'] = 'warning'
-        else:
-            parsing_data['severity'] = 'info'
-
+        
         # Remove leading timestamp-like prefix if present
         timestamp_pattern = r'^[\d\-:\s]+\s+'
         message = re.sub(timestamp_pattern, '', raw_log)
         parsing_data['message'] = message.strip()
-
+        
         return parsing_data
+    
+    @staticmethod
+    def _extract_ip(text: str):
+        """Extract first IPv4 address from text."""
+        ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
+        match = re.search(ip_pattern, text)
+        return match.group() if match else None
+    
+    @staticmethod
+    def _determine_severity(text: str):
+        """Determine severity based on keywords in the text."""
+        text_lower = text.lower()
+        
+        # Critical keywords
+        if any(word in text_lower for word in ['critical', 'fatal', 'emergency', 'panic']):
+            return 'critical'
+        
+        # Error keywords
+        if any(word in text_lower for word in ['error', 'fail', 'denied', 'unauthorized', 'refused']):
+            return 'error'
+        
+        # Warning keywords
+        if any(word in text_lower for word in ['warn', 'warning', 'alert', 'notice']):
+            return 'warning'
+        
+        # Default
+        return 'info'
+
+
+class BulkLogProcessor:
+    """Handles processing of multiple logs at once (for file uploads)"""
+    
+    @staticmethod
+    def process_bulk_logs(raw_logs_text, device_id):
+        """
+        Process multiple logs from a text block or file
+        
+        Args:
+            raw_logs_text (str): Multiple log lines (separated by newlines)
+            device_id (int): Device ID to associate logs with
+            
+        Returns:
+            dict: Summary with success count, failed count, and created log entries
+        """
+        results = {
+            'success': 0,
+            'failed': 0,
+            'log_entries': [],
+            'errors': []
+        }
+        
+        # Split by newlines and filter empty lines
+        log_lines = [line.strip() for line in raw_logs_text.split('\n') if line.strip()]
+        
+        for line in log_lines:
+            try:
+                log_entry = LogCollector.collect_log(line, device_id)
+                if log_entry:
+                    results['success'] += 1
+                    results['log_entries'].append(log_entry)
+                else:
+                    results['failed'] += 1
+                    results['errors'].append(f"Failed to process: {line[:50]}...")
+            except Exception as e:
+                results['failed'] += 1
+                results['errors'].append(f"Error: {str(e)[:50]}")
+        
+        return results
 
 
 class LogProcessor:
@@ -382,6 +607,162 @@ def dashboard():
                          active_alerts=active_alerts,
                          devices_count=devices_count,
                          flagged_logs=flagged_logs)
+
+@app.route("/submit_log", methods=['GET', 'POST'])
+def submit_log():
+    """Submit logs manually - paste text or upload file"""
+    if 'admin_id' not in session:
+        flash('Please login first', 'error')
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        device_id = request.form.get('device_id')
+        log_text = request.form.get('log_text', '').strip()
+        uploaded_file = request.files.get('log_file')
+        
+        # Validate device selection
+        if not device_id:
+            flash('Please select a device', 'error')
+            return redirect(url_for('submit_log'))
+        
+        # Get log content from either text input or file
+        log_content = None
+        
+        if uploaded_file and uploaded_file.filename:
+            # File upload
+            if uploaded_file.filename.endswith(('.log', '.txt')):
+                log_content = uploaded_file.read().decode('utf-8', errors='ignore')
+                flash(f'File "{uploaded_file.filename}" uploaded successfully', 'success')
+            else:
+                flash('Invalid file type. Please upload .log or .txt files', 'error')
+                return redirect(url_for('submit_log'))
+        elif log_text:
+            # Text paste
+            log_content = log_text
+        else:
+            flash('Please paste log text or upload a file', 'error')
+            return redirect(url_for('submit_log'))
+        
+        # Process the logs
+        if log_content:
+            results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
+            
+            if results['success'] > 0:
+                flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
+            if results['failed'] > 0:
+                flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
+            
+            return redirect(url_for('view_logs'))
+    
+    # GET request - show form
+    devices = Device.query.all()
+    return render_template('submit_log.html', devices=devices)
+
+@app.route("/view_logs")
+def view_logs():
+    """View all logs with search and filter"""
+    if 'admin_id' not in session:
+        flash('Please login first', 'error')
+        return redirect(url_for('login'))
+    
+    # Get filter parameters
+    search_query: str = request.args.get('search', '').strip()
+    device_id: int | None = request.args.get('device_id', type=int)
+    severity: str = request.args.get('severity', '').strip()
+    flagged_only: bool = request.args.get('flagged_only') == 'true'
+    
+    # Build query
+    query = LogEntry.query
+    
+    # Apply filters
+    if search_query:
+        query = query.filter(LogEntry.message.contains(search_query))  # type: ignore[arg-type]
+    
+    if device_id:
+        query = query.filter(LogEntry.sourceDevice == device_id)  # type: ignore[arg-type]
+    
+    if severity:
+        query = query.filter(LogEntry.severity == severity)  # type: ignore[arg-type]
+    
+    if flagged_only:
+        # Filter for flagged logs (where isFlagged is True)
+        query = query.filter(LogEntry.isFlagged.is_(True))  # type: ignore[attr-defined]
+    
+    # Get logs ordered by most recent first
+    logs = query.order_by(LogEntry.timestamp.desc()).all()
+    
+    # Get all devices for filter dropdown
+    devices = Device.query.all()
+    
+    return render_template('view_logs.html', 
+                         logs=logs,
+                         devices=devices,
+                         search_query=search_query,
+                         selected_device=device_id,
+                         selected_severity=severity,
+                         flagged_only=flagged_only)
+
+@app.route("/view_alerts")
+def view_alerts():
+    """View all security alerts"""
+    if 'admin_id' not in session:
+        flash('Please login first', 'error')
+        return redirect(url_for('login'))
+    
+    # Get filter parameters
+    status_filter: str = request.args.get('status', '').strip()
+    severity_filter: str = request.args.get('severity', '').strip()
+    alert_type_filter: str = request.args.get('alert_type', '').strip()
+    
+    # Build query
+    query = Alert.query
+    
+    # Apply filters
+    if status_filter:
+        query = query.filter(Alert.status == status_filter)  # type: ignore[arg-type]
+    
+    if severity_filter:
+        query = query.filter(Alert.severity == severity_filter)  # type: ignore[arg-type]
+    
+    if alert_type_filter:
+        query = query.filter(Alert.alertType == alert_type_filter)  # type: ignore[arg-type]
+    
+    # Get alerts ordered by most recent first
+    alerts = query.order_by(Alert.timestamp.desc()).all()
+    
+    return render_template('view_alerts.html',
+                         alerts=alerts,
+                         selected_status=status_filter,
+                         selected_severity=severity_filter,
+                         selected_alert_type=alert_type_filter)
+
+@app.route("/acknowledge_alert/<int:alert_id>", methods=['POST'])
+def acknowledge_alert(alert_id):
+    """Mark an alert as acknowledged"""
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    
+    alert = Alert.query.get(alert_id)
+    if alert:
+        alert.status = 'acknowledged'
+        db.session.commit()
+        flash('Alert acknowledged', 'success')
+    
+    return redirect(url_for('view_alerts'))
+
+@app.route("/resolve_alert/<int:alert_id>", methods=['POST'])
+def resolve_alert(alert_id):
+    """Mark an alert as resolved"""
+    if 'admin_id' not in session:
+        return redirect(url_for('login'))
+    
+    alert = Alert.query.get(alert_id)
+    if alert:
+        alert.status = 'resolved'
+        db.session.commit()
+        flash('Alert resolved', 'success')
+    
+    return redirect(url_for('view_alerts'))
 
 @app.route("/logout")
 def logout():

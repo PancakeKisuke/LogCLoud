@@ -5,137 +5,262 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LogCloud - Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        body {
+        * {
             margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: rgb(232, 233, 235);
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #2d3748;
         }
         
         .navbar {
-            background-color: rgb(144, 151, 174);
-            color: white;
-            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 5px rgb(0,0,0,0.1);
         }
         
-       .navbar h1 {
-            margin: 0;
-            font-size: 24px;
-            font-family: 'Arial', 'Helvetica', sans-serif;
-            font-weight: 600; 
-            letter-spacing: 0.5px; 
+        .navbar h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #5a67d8;
+            letter-spacing: -0.5px;
         }
         
-        .navbar-right {
+        .nav-links {
             display: flex;
+            gap: 2rem;
             align-items: center;
-            gap: 20px;
+        }
+        
+        .nav-link {
+            color: #4a5568;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+        
+        .nav-link:hover {
+            color: #5a67d8;
+        }
+        
+        .nav-link.active {
+            color: #5a67d8;
+            font-weight: 600;
         }
         
         .user-info {
-            color: #ecf0f1;
+            color: #718096;
+            font-size: 0.9rem;
+            padding-right: 1rem;
+            border-right: 1px solid #e2e8f0;
         }
         
         .btn-logout {
-            background-color: #e74c3c;
+            background: #fc8181;
             color: white;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 5px;
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
             text-decoration: none;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background-color 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.2s;
         }
         
         .btn-logout:hover {
-            background-color: #c0392b;
+            background: #f56565;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
         }
         
         .container {
             max-width: 1200px;
-            margin: 30px auto;
-            padding: 0 20px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .alert {
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid;
+        }
+        
+        .alert-success {
+            border-left-color: #48bb78;
+            color: #22543d;
         }
         
         .welcome-card {
             background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
         }
         
         .welcome-card h2 {
-            color: #2c3e50;
-            margin-top: 0;
+            font-size: 1.5rem;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .welcome-card p {
+            color: #718096;
+            line-height: 1.6;
         }
         
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
         }
         
         .stat-card {
             background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            text-align: center;
+            padding: 1.75rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+        }
+        
+        .stat-card.logs::before { background: linear-gradient(90deg, #4299e1, #3182ce); }
+        .stat-card.alerts::before { background: linear-gradient(90deg, #fc8181, #f56565); }
+        .stat-card.devices::before { background: linear-gradient(90deg, #48bb78, #38a169); }
+        .stat-card.flagged::before { background: linear-gradient(90deg, #ed8936, #dd6b20); }
         
         .stat-card h3 {
-            margin: 0 0 10px 0;
-            color: #7f8c8d;
-            font-size: 14px;
+            font-size: 0.875rem;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #a0aec0;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
         }
         
-        .stat-card .stat-value {
-            font-size: 36px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin: 0;
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2d3748;
+            line-height: 1;
         }
         
-        .stat-card.logs { border-left: 5px solid #3498db; }
-        .stat-card.alerts { border-left: 5px solid #e74c3c; }
-        .stat-card.devices { border-left: 5px solid #27ae60; }
-        .stat-card.flagged { border-left: 5px solid #f39c12; }
+        .stat-card.logs .stat-value { color: #3182ce; }
+        .stat-card.alerts .stat-value { color: #f56565; }
+        .stat-card.devices .stat-value { color: #38a169; }
+        .stat-card.flagged .stat-value { color: #dd6b20; }
         
-        .alert {
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
         }
         
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+        .action-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            color: white;
+            text-align: center;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .action-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+        
+        .action-card.submit::before {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+        }
+        
+        .action-card.view-logs::before {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+        
+        .action-card.view-alerts::before {
+            background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+        }
+        
+        .action-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 16px 32px rgba(0,0,0,0.15);
+        }
+        
+        .action-card:hover::before {
+            opacity: 0.9;
+        }
+        
+        .action-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .action-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .action-description {
+            font-size: 0.9rem;
+            opacity: 0.95;
         }
     </style>
 </head>
 <body>
-    <!-- Navigation Bar -->
     <nav class="navbar">
-        <h1>LogCloud Dashboard</h1>
-        <div class="navbar-right">
-            <span class="user-info">Welcome, <strong>{{ username }}</strong></span>
+        <h1>LogCloud</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
+            <a href="{{ url_for('submit_log') }}" class="nav-link">Submit Logs</a>
+            <a href="{{ url_for('view_logs') }}" class="nav-link">View Logs</a>
+            <a href="{{ url_for('view_alerts') }}" class="nav-link">Alerts</a>
+            <span class="user-info">{{ username }}</span>
             <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
         </div>
     </nav>
     
-    <!-- Main Content -->
     <div class="container">
-        <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -146,45 +271,57 @@
             {% endif %}
         {% endwith %}
         
-        <!-- Welcome Card -->
         <div class="welcome-card">
-            <h2>Welcome to LogCloud Centralized Monitoring</h2>
-            <p>Monitor your logs, detect threats, and manage security alerts from this dashboard.</p>
+            <h2>Welcome to LogCloud</h2>
+            <p>Centralized log monitoring and threat detection for your network infrastructure.</p>
         </div>
         
-        <!-- Statistics Grid -->
         <div class="stats-grid">
             <div class="stat-card logs">
                 <h3>Total Logs</h3>
-                <p class="stat-value">{{ total_logs }}</p>
+                <div class="stat-value">{{ total_logs }}</div>
             </div>
             
             <div class="stat-card alerts">
                 <h3>Active Alerts</h3>
-                <p class="stat-value">{{ active_alerts }}</p>
+                <div class="stat-value">{{ active_alerts }}</div>
             </div>
             
             <div class="stat-card devices">
                 <h3>Devices</h3>
-                <p class="stat-value">{{ devices_count }}</p>
+                <div class="stat-value">{{ devices_count }}</div>
             </div>
             
             <div class="stat-card flagged">
                 <h3>Flagged Logs</h3>
-                <p class="stat-value">{{ flagged_logs }}</p>
+                <div class="stat-value">{{ flagged_logs }}</div>
             </div>
         </div>
         
-        <!-- Coming Soon Section -->
         <div class="welcome-card">
-            <h2>Coming Soon</h2>
-            <ul>
-                <li>Real-time log monitoring</li>
-                <li>Threat detection dashboard</li>
-                <li>Alert management system</li>
-                <li>Device registration</li>
-                <li>Log search and filtering</li>
-            </ul>
+            <h2>Quick Actions</h2>
+            <div class="actions-grid">
+                <a href="{{ url_for('submit_log') }}" class="action-card submit">
+                    <div class="action-content">
+                        <div class="action-title">Submit Logs</div>
+                        <div class="action-description">Upload or paste log entries</div>
+                    </div>
+                </a>
+                
+                <a href="{{ url_for('view_logs') }}" class="action-card view-logs">
+                    <div class="action-content">
+                        <div class="action-title">View Logs</div>
+                        <div class="action-description">Browse and filter all logs</div>
+                    </div>
+                </a>
+                
+                <a href="{{ url_for('view_alerts') }}" class="action-card view-alerts">
+                    <div class="action-content">
+                        <div class="action-title">View Alerts</div>
+                        <div class="action-description">Manage security alerts</div>
+                    </div>
+                </a>
+            </div>
         </div>
     </div>
 </body>
