@@ -86,14 +86,13 @@ class Alert(db.Model):
 
 # ==================== LOGIC CLASSES ====================
 
+# ==================== LOGIC CLASSES ====================
+
 import re
 
 
 class LogCollector:
     """Class to handle log collection from devices"""
-
-    def __init__(self):
-        pass
 
     @staticmethod
     def collect_log(raw_log, device_id):
@@ -111,14 +110,14 @@ class LogCollector:
             if not device:
                 raise ValueError(f"Device with ID {device_id} not found")
 
-            parsed_log = LogParser.parse_log(raw_log)
+            parsed_data = LogParser.parse_log(raw_log)
 
             # Create the LogEntry and persist it so it has a primary key
             log_entry = LogEntry(
                 sourceDevice=device_id,
-                ipAddress=parsed_log.get('ipAddress'),
-                severity=parsed_log.get('severity', 'info'),
-                message=parsed_log.get('message'),
+                ipAddress=parsed_data.get('ipAddress'),
+                severity=parsed_data.get('severity', 'info'),
+                message=parsed_data.get('message', raw_log),
                 rawlog=raw_log,
                 status='parsed'
             )
@@ -127,12 +126,13 @@ class LogCollector:
             db.session.commit()  # now log_entry.LogID is available
 
             # Process the log (may create alerts, update flags, etc.)
-            LogProcessor.process_log(log_entry)
+            LogProcessor.analyze(log_entry)
 
             return log_entry
 
         except Exception as e:
             print(f"Error collecting log: {e}")
+            db.session.rollback()
             return None
 
 
@@ -172,32 +172,6 @@ class LogParser:
         return parsing_data
 
 
-class LogProcessor:
-    """Processes LogEntry objects: sets flags and creates Alerts when needed."""
-
-    @staticmethod
-    def process_log(log_entry: LogEntry):
-        try:
-            sev = (log_entry.severity or '').lower()
-            if sev in ('critical', 'error'):
-                log_entry.isFlagged = True
-                # create an alert for high-severity logs
-                alert = Alert(
-                    logID=log_entry.LogID,
-                    alertType='High Severity Log',
-                    severity=log_entry.severity or 'error',
-                    description=(log_entry.message or '')[:1024],
-                )
-                db.session.add(alert)
-
-            # persist any changes to the log entry and alerts
-            db.session.add(log_entry)
-            db.session.commit()
-
-        except Exception as e:
-            # don't let processing crash the collector; log and continue
-            print(f"Error processing log {getattr(log_entry, 'LogID', None)}: {e}")
-            
 class LogProcessor:
     """Analyzes logs for suspicious patterns and generates alerts"""
     
@@ -251,7 +225,7 @@ class LogProcessor:
                     
                     # Create alert
                     alert = Alert(
-                        logID=log_entry.logID,
+                        logID=log_entry.LogID,
                         alertType=threat_type,
                         severity=severity,
                         description=f"{threat_type} detected: {log_entry.message[:100]}",
@@ -277,13 +251,114 @@ class LogProcessor:
         base_severity = severity_map.get(threat_type, 'LOW')
         
         # Escalate if log itself is critical
-        if log_severity == 'CRITICAL':
+        if log_severity and log_severity.upper() == 'CRITICAL':
             return 'CRITICAL'
-        elif log_severity == 'ERROR' and base_severity in ['LOW', 'MEDIUM']:
+        elif log_severity and log_severity.upper() == 'ERROR' and base_severity in ['LOW', 'MEDIUM']:
             return 'HIGH'
         
         return base_severity
+
+
+# ==================== ROUTES ====================
+
+@app.route("/")
+def index():
+    """Redirect to login page"""
+    return redirect(url_for('login'))
+
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    """Login page - Admin authentication"""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Validate input
+        if not username or not password:
+            flash('Please enter both username and password', 'error')
+            return render_template('login.html')
+        
+        # Check if admin exists
+        admin = Admin.query.filter_by(username=username).first()
+        
+        if admin and check_password_hash(admin.password, password):
+            # Successful login
+            session['admin_id'] = admin.userID
+            session['username'] = admin.username
+            
+            # Update last login time
+            from datetime import datetime
+            admin.lastLogin = datetime.now()
+            db.session.commit()
+            
+            flash('Login successful!', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            # Failed login
+            flash('Invalid username or password', 'error')
+            return render_template('login.html')
     
+    # GET request - show login form
+    return render_template('login.html')
+
+@app.route("/dashboard")
+def dashboard():
+    """Main dashboard - requires login"""
+    if 'admin_id' not in session:
+        flash('Please login to access the dashboard', 'error')
+        return redirect(url_for('login'))
+    
+    username = session.get('username', 'Admin')
+    return render_template('dashboard.html', username=username)
+
+@app.route("/logout")
+def logout():
+    """Logout - clear session"""
+    session.clear()
+    flash('You have been logged out', 'success')
+    return redirect(url_for('login'))
+
+# ==================== DATABASE INITIALIZATION ====================
+
+def init_db():
+    """Initialize database and create default admin user"""
+    with app.app_context():
+        db.create_all()
+        
+        # Check if admin already exists
+        if Admin.query.filter_by(username='admin').first() is None:
+            # Create default admin user
+            default_admin = Admin(
+                username='admin',
+                password=generate_password_hash('admin123')  # Default password
+            )
+            db.session.add(default_admin)
+            db.session.commit()
+            print("Default admin user created: username='admin', password='admin123'")
+        else:
+            print("Admin user already exists")
+        
+        if Device.query.count() == 0: # if no devices exist, add some test devices
+            test_device = [
+                Device(deviceName='Router-01', deviceType='router', ipAddress='192.168.1.1'),
+                Device(deviceName='Firewall-01', deviceType='firewall', ipAddress='192.168.1.10'),
+                Device(deviceName='Server-01', deviceType='server', ipAddress='192.168.1.100')
+            ]
+            for device in test_device: # add each device to the session which is the database by the way kat
+                db.session.add(device) #loop through and add
+            db.session.commit() # save to database
+            print("Test devices added to the database")
+        else:
+            print("Devices already exist in the database")
+            
+# ==================== RUN APPLICATION ====================
+
+if __name__ == "__main__":
+    # Initialize database on first run
+    init_db()
+    
+    # Run the app
+    app.run(debug=True)
 
 # ==================== ROUTES ====================
 
