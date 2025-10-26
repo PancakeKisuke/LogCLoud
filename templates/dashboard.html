@@ -145,54 +145,47 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-
-
-        <!-- Coming Soon Section -->
-<div class="welcome-card">
-    <h2>Coming Soon</h2>
-    <ul>
-        <li>Real-time log monitoring</li>
-        <li>Threat detection dashboard</li>
-        <li>Alert management system</li>
-        <li>Device registration</li>
-        <li>Log search and filtering</li>
-    </ul>
-    
-    <!-- ADD THIS BUTTON -->
-    <a href="{{ url_for('test_log') }}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; font-weight: 600;">
-        🧪 Test Log Processing
-    </a>
-</div>
         
         <!-- Welcome Card -->
         <div class="welcome-card">
             <h2>Welcome to LogCloud Centralized Monitoring</h2>
-            <p>Monitor your logs detect threats, and manage security alerts from this dashboard.</p>
+            <p>Monitor your logs, detect threats, and manage security alerts from this dashboard.</p>
         </div>
         
         <!-- Statistics Grid -->
         <div class="stats-grid">
             <div class="stat-card logs">
                 <h3>Total Logs</h3>
-                <p class="stat-value">0</p>
+                <p class="stat-value">{{ total_logs }}</p>
             </div>
             
             <div class="stat-card alerts">
                 <h3>Active Alerts</h3>
-                <p class="stat-value">0</p>
+                <p class="stat-value">{{ active_alerts }}</p>
             </div>
             
             <div class="stat-card devices">
                 <h3>Devices</h3>
-                <p class="stat-value">0</p>
+                <p class="stat-value">{{ devices_count }}</p>
             </div>
             
             <div class="stat-card flagged">
                 <h3>Flagged Logs</h3>
-                <p class="stat-value">0</p>
+                <p class="stat-value">{{ flagged_logs }}</p>
             </div>
         </div>
         
+        <!-- Coming Soon Section -->
+        <div class="welcome-card">
+            <h2>Coming Soon</h2>
+            <ul>
+                <li>Real-time log monitoring</li>
+                <li>Threat detection dashboard</li>
+                <li>Alert management system</li>
+                <li>Device registration</li>
+                <li>Log search and filtering</li>
+            </ul>
+        </div>
     </div>
 </body>
 </html>

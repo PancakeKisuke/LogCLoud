@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import os
+import re
 
 # My webapp
 app = Flask(__name__)
@@ -33,6 +34,12 @@ class Admin(db.Model):
     password = db.Column(db.String(200), nullable=False)  # Hashed password
     lastLogin = db.Column(db.DateTime, nullable=True)
     
+    def __init__(self, username=None, password=None):
+        if username:
+            self.username = username
+        if password:
+            self.password = password
+    
     def __repr__(self):
         return f'<Admin {self.username}>'
 
@@ -46,6 +53,15 @@ class Device(db.Model):
     status = db.Column(db.String(20), default='active')
     registeredOn = db.Column(db.DateTime, default=datetime.utcnow)
     logs = db.relationship('LogEntry', backref='device', lazy=True)
+    
+    def __init__(self, deviceName=None, deviceType=None, ipAddress=None, status='active'):
+        if deviceName:
+            self.deviceName = deviceName
+        if deviceType:
+            self.deviceType = deviceType
+        if ipAddress:
+            self.ipAddress = ipAddress
+        self.status = status
     
     def __repr__(self):
         return f'<Device {self.deviceName}>' # these are useful for debugging
@@ -65,6 +81,17 @@ class LogEntry(db.Model):
     status = db.Column(db.String(20), default='received')
     alerts = db.relationship('Alert', backref='log', lazy=True)
     
+    def __init__(self, sourceDevice=None, ipAddress=None, severity=None, message=None, rawlog=None, status='received'):
+        if sourceDevice:
+            self.sourceDevice = sourceDevice
+        self.ipAddress = ipAddress
+        self.severity = severity
+        if message:
+            self.message = message
+        self.rawlog = rawlog
+        self.status = status
+        self.isFlagged = False
+    
     def __repr__(self):
         return f'<LogEntry {self.LogID} from Device {self.sourceDevice}>'
 
@@ -81,13 +108,20 @@ class Alert(db.Model):
     # status should be a string with values like 'pending', 'acknowledged', 'resolved'
     status = db.Column(db.String(20), default='pending') # pending, acknowledged, resolved
     
+    def __init__(self, logID=None, alertType=None, severity=None, description=None, status='pending'):
+        if logID:
+            self.logID = logID
+        if alertType:
+            self.alertType = alertType
+        if severity:
+            self.severity = severity
+        self.description = description
+        self.status = status
+    
     def __repr__(self):
         return f'<Alert {self.alertID} - {self.alertType} ({self.severity})>' # useful for debugging
 
 # ==================== LOGIC CLASSES ====================
-
-import re
-
 
 class LogCollector:
     """Class to handle log collection from devices"""
@@ -133,6 +167,7 @@ class LogCollector:
 
         except Exception as e:
             print(f"Error collecting log: {e}")
+            db.session.rollback()
             return None
 
 
@@ -173,32 +208,6 @@ class LogParser:
 
 
 class LogProcessor:
-    """Processes LogEntry objects: sets flags and creates Alerts when needed."""
-
-    @staticmethod
-    def process_log(log_entry: LogEntry):
-        try:
-            sev = (log_entry.severity or '').lower()
-            if sev in ('critical', 'error'):
-                log_entry.isFlagged = True
-                # create an alert for high-severity logs
-                alert = Alert(
-                    logID=log_entry.LogID,
-                    alertType='High Severity Log',
-                    severity=log_entry.severity or 'error',
-                    description=(log_entry.message or '')[:1024],
-                )
-                db.session.add(alert)
-
-            # persist any changes to the log entry and alerts
-            db.session.add(log_entry)
-            db.session.commit()
-
-        except Exception as e:
-            # don't let processing crash the collector; log and continue
-            print(f"Error processing log {getattr(log_entry, 'LogID', None)}: {e}")
-            
-class LogProcessor:
     """Analyzes logs for suspicious patterns and generates alerts"""
     
     # Threat detection patterns
@@ -229,40 +238,67 @@ class LogProcessor:
     }
     
     @staticmethod
-    def analyze(log_entry):
+    def process_log(log_entry):
         """
-        Analyze a log entry for suspicious patterns
+        Analyze a log entry for suspicious patterns and set flags/create alerts
         
         Args:
             log_entry (LogEntry): The log to analyze
         """
-        message_lower = log_entry.message.lower()
-        
-        # Check each threat pattern
-        for threat_type, patterns in LogProcessor.THREAT_PATTERNS.items():
-            for pattern in patterns:
-                if re.search(pattern, message_lower):
-                    # Threat detected!
-                    log_entry.isFlagged = True
-                    log_entry.status = 'flagged'
-                    
-                    # Determine severity
-                    severity = LogProcessor._determine_severity(threat_type, log_entry.severity)
-                    
-                    # Create alert
-                    alert = Alert(
-                        logID=log_entry.logID,
-                        alertType=threat_type,
-                        severity=severity,
-                        description=f"{threat_type} detected: {log_entry.message[:100]}",
-                        status='pending'
-                    )
-                    
-                    db.session.add(alert)
-                    return  # Only create one alert per log
-        
-        # No threats detected
-        log_entry.status = 'analyzed'
+        try:
+            message_lower = log_entry.message.lower()
+            
+            # First check basic severity-based flagging
+            sev = (log_entry.severity or '').lower()
+            if sev in ('critical', 'error'):
+                log_entry.isFlagged = True
+                log_entry.status = 'flagged'
+                
+                # Create a basic high-severity alert
+                alert = Alert(
+                    logID=log_entry.LogID,
+                    alertType='High Severity Log',
+                    severity=log_entry.severity.upper() if log_entry.severity else 'ERROR',
+                    description=f"High severity log detected: {log_entry.message[:100]}",
+                    status='pending'
+                )
+                db.session.add(alert)
+            
+            # Then check threat patterns
+            for threat_type, patterns in LogProcessor.THREAT_PATTERNS.items():
+                for pattern in patterns:
+                    if re.search(pattern, message_lower):
+                        # Threat detected!
+                        log_entry.isFlagged = True
+                        log_entry.status = 'flagged'
+                        
+                        # Determine severity
+                        severity = LogProcessor._determine_severity(threat_type, log_entry.severity)
+                        
+                        # Create alert
+                        alert = Alert(
+                            logID=log_entry.LogID,
+                            alertType=threat_type,
+                            severity=severity,
+                            description=f"{threat_type.replace('_', ' ')} detected: {log_entry.message[:100]}",
+                            status='pending'
+                        )
+                        
+                        db.session.add(alert)
+                        # Only create one alert per log
+                        db.session.commit()
+                        return
+            
+            # If no threats detected, mark as analyzed
+            if log_entry.status != 'flagged':
+                log_entry.status = 'analyzed'
+            
+            db.session.commit()
+            
+        except Exception as e:
+            # don't let processing crash the collector; log and continue
+            print(f"Error processing log {getattr(log_entry, 'LogID', None)}: {e}")
+            db.session.rollback()
     
     @staticmethod
     def _determine_severity(threat_type, log_severity):
@@ -277,9 +313,9 @@ class LogProcessor:
         base_severity = severity_map.get(threat_type, 'LOW')
         
         # Escalate if log itself is critical
-        if log_severity == 'CRITICAL':
+        if log_severity and log_severity.upper() == 'CRITICAL':
             return 'CRITICAL'
-        elif log_severity == 'ERROR' and base_severity in ['LOW', 'MEDIUM']:
+        elif log_severity and log_severity.upper() == 'ERROR' and base_severity in ['LOW', 'MEDIUM']:
             return 'HIGH'
         
         return base_severity
@@ -313,7 +349,6 @@ def login():
             session['username'] = admin.username
             
             # Update last login time
-            from datetime import datetime
             admin.lastLogin = datetime.now()
             db.session.commit()
             
@@ -334,8 +369,19 @@ def dashboard():
         flash('Please login to access the dashboard', 'error')
         return redirect(url_for('login'))
     
+    # Get statistics for dashboard
+    total_logs = LogEntry.query.count()
+    active_alerts = Alert.query.filter_by(status='pending').count()
+    devices_count = Device.query.count()
+    flagged_logs = LogEntry.query.filter_by(isFlagged=True).count()
+    
     username = session.get('username', 'Admin')
-    return render_template('dashboard.html', username=username)
+    return render_template('dashboard.html', 
+                         username=username,
+                         total_logs=total_logs,
+                         active_alerts=active_alerts,
+                         devices_count=devices_count,
+                         flagged_logs=flagged_logs)
 
 @app.route("/logout")
 def logout():
@@ -365,12 +411,12 @@ def init_db():
             print("Admin user already exists")
         
         if Device.query.count() == 0: # if no devices exist, add some test devices
-            test_device = [
+            test_devices = [
                 Device(deviceName='Router-01', deviceType='router', ipAddress='192.168.1.1'),
                 Device(deviceName='Firewall-01', deviceType='firewall', ipAddress='192.168.1.10'),
                 Device(deviceName='Server-01', deviceType='server', ipAddress='192.168.1.100')
             ]
-            for device in test_device: # add each device to the session which is the database by the way kat
+            for device in test_devices: # add each device to the session which is the database by the way kat
                 db.session.add(device) #loop through and add
             db.session.commit() # save to database
             print("Test devices added to the database")
