@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit Logs - LogCloud</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #2d3748;
+        }
+        
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #5a67d8;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        
+        .nav-link {
+            color: #4a5568;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+        
+        .nav-link:hover {
+            color: #5a67d8;
+        }
+        
+        .nav-link.active {
+            color: #5a67d8;
+            font-weight: 600;
+        }
+        
+        .btn-logout {
+            background: #fc8181;
+            color: white;
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        
+        .btn-logout:hover {
+            background: #f56565;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 1.5rem;
+        }
+        
+        .card h2 {
+            font-size: 1.5rem;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+        
+        .card p {
+            color: #718096;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 0.9rem;
+        }
+        
+        select, textarea, input[type="file"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        
+        select:focus, textarea:focus {
+            outline: none;
+            border-color: #5a67d8;
+        }
+        
+        textarea {
+            min-height: 200px;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            resize: vertical;
+        }
+        
+        input[type="file"] {
+            border-style: dashed;
+            background-color: #f7fafc;
+            cursor: pointer;
+            padding: 1.5rem;
+        }
+        
+        input[type="file"]:hover {
+            border-color: #5a67d8;
+            background-color: #edf2f7;
+        }
+        
+        .btn {
+            padding: 0.875rem 2rem;
+            background: linear-gradient(135deg, #5a67d8, #4c51bf);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(90, 103, 216, 0.3);
+        }
+        
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid;
+        }
+        
+        .alert-success {
+            background: #f0fff4;
+            border-left-color: #48bb78;
+            color: #22543d;
+        }
+        
+        .alert-warning {
+            background: #fffaf0;
+            border-left-color: #ed8936;
+            color: #7c2d12;
+        }
+        
+        .alert-error {
+            background: #fff5f5;
+            border-left-color: #fc8181;
+            color: #742a2a;
+        }
+        
+        .divider {
+            text-align: center;
+            margin: 2rem 0;
+            color: #a0aec0;
+            font-weight: 600;
+            font-size: 0.875rem;
+            position: relative;
+        }
+        
+        .divider::before,
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 45%;
+            height: 1px;
+            background: #e2e8f0;
+        }
+        
+        .divider::before { left: 0; }
+        .divider::after { right: 0; }
+        
+        .examples {
+            background: #f7fafc;
+            padding: 1.5rem;
+            border-radius: 12px;
+        }
+        
+        .examples h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        
+        .example-item {
+            background: white;
+            padding: 1rem;
+            margin: 0.75rem 0;
+            border-left: 3px solid #cbd5e0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .example-item:hover {
+            border-left-color: #5a67d8;
+            background: #edf2f7;
+            transform: translateX(4px);
+        }
+        
+        .example-item.threat {
+            border-left-color: #fc8181;
+        }
+        
+        .example-item .label {
+            font-weight: 600;
+            color: #2d3748;
+            font-family: inherit;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>LogCloud</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+            <a href="{{ url_for('submit_log') }}" class="nav-link active">Submit Logs</a>
+            <a href="{{ url_for('view_logs') }}" class="nav-link">View Logs</a>
+            <a href="{{ url_for('view_alerts') }}" class="nav-link">Alerts</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="card">
+            <h2>Submit Logs</h2>
+            <p>Upload log files or paste log entries for processing</p>
+            
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="device_id">Source Device *</label>
+                    <select name="device_id" id="device_id" required>
+                        <option value="">Select a device</option>
+                        {% for device in devices %}
+                            <option value="{{ device.deviceID }}">{{ device.deviceName }} ({{ device.deviceType }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="log_text">Paste Log Text</label>
+                    <textarea name="log_text" id="log_text" placeholder="Paste your log entries here (one per line)"></textarea>
+                </div>
+                
+                <div class="divider">OR</div>
+                
+                <div class="form-group">
+                    <label for="log_file">Upload Log File</label>
+                    <input type="file" name="log_file" id="log_file" accept=".log,.txt">
+                </div>
+                
+                <button type="submit" class="btn">Process Logs</button>
+            </form>
+        </div>
+        
+        <div class="examples">
+            <h3>Example Log Formats</h3>
+            
+            <div class="example-item" onclick="copyExample(this)">
+                <div class="label">Syslog - Normal</div>
+                Oct 26 15:30:01 router1 sshd[1234]: Accepted publickey for admin from 192.168.1.100
+            </div>
+            
+            <div class="example-item threat" onclick="copyExample(this)">
+                <div class="label">Syslog - Failed Login</div>
+                Oct 26 15:30:01 router1 sshd[1234]: Failed password for admin from 192.168.1.100
+            </div>
+            
+            <div class="example-item" onclick="copyExample(this)">
+                <div class="label">Apache/Nginx - Success</div>
+                192.168.1.100 - - [26/Oct/2024:15:30:01 +0000] "GET /index.html HTTP/1.1" 200 512
+            </div>
+            
+            <div class="example-item threat" onclick="copyExample(this)">
+                <div class="label">Apache/Nginx - 404 Error</div>
+                192.168.1.100 - - [26/Oct/2024:15:30:01 +0000] "GET /admin HTTP/1.1" 404 512
+            </div>
+            
+            <div class="example-item threat" onclick="copyExample(this)">
+                <div class="label">Windows Event - Failed Login</div>
+                Event ID: 4625, Level: Error, Source: Security, Message: An account failed to log on
+            </div>
+            
+            <div class="example-item threat" onclick="copyExample(this)">
+                <div class="label">Firewall - Blocked Connection</div>
+                iptables: IN=eth0 OUT= SRC=192.168.1.100 DST=10.0.0.1 PROTO=TCP DPT=22 BLOCKED
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function copyExample(element) {
+            const text = element.lastChild.textContent.trim();
+            navigator.clipboard.writeText(text).then(() => {
+                const originalBg = element.style.backgroundColor;
+                element.style.backgroundColor = '#f0fff4';
+                setTimeout(() => {
+                    element.style.backgroundColor = originalBg;
+                }, 400);
+            });
+        }
+    </script>
+</body>
+</html>
