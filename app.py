@@ -11,7 +11,7 @@ import re
 app = Flask(__name__)
 
 # Secret key for sessions (IMPORTANT)
-app.secret_key = 'secret-key-for-session'  # 
+app.secret_key = 'secret-key-for-session'  # Change this to a random secret key in production
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///logcloud.db'
@@ -33,6 +33,10 @@ class Admin(db.Model):
     password = db.Column(db.String(200), nullable=False)
     lastLogin = db.Column(db.DateTime, nullable=True)
     
+    def __init__(self, username=None, password=None):
+        self.username = username
+        self.password = password
+    
     def __repr__(self):
         return f'<Admin {self.username}>'
 
@@ -47,6 +51,12 @@ class Device(db.Model):
     status = db.Column(db.String(20), default='active')
     registeredOn = db.Column(db.DateTime, default=datetime.utcnow)
     logs = db.relationship('LogEntry', backref='device', lazy=True)
+    
+    def __init__(self, deviceName=None, deviceType=None, ipAddress=None, status='active'):
+        self.deviceName = deviceName
+        self.deviceType = deviceType
+        self.ipAddress = ipAddress
+        self.status = status
     
     def __repr__(self):
         return f'<Device {self.deviceName}>'
@@ -66,6 +76,15 @@ class LogEntry(db.Model):
     status = db.Column(db.String(20), default='received')
     alerts = db.relationship('Alert', backref='log', lazy=True)
     
+    def __init__(self, sourceDevice=None, ipAddress=None, severity=None, message=None, rawlog=None, isFlagged=False, status='received'):
+        self.sourceDevice = sourceDevice
+        self.ipAddress = ipAddress
+        self.severity = severity
+        self.message = message
+        self.rawlog = rawlog
+        self.isFlagged = isFlagged
+        self.status = status
+    
     def __repr__(self):
         return f'<LogEntry {self.LogID} from Device {self.sourceDevice}>'
 
@@ -80,6 +99,13 @@ class Alert(db.Model):
     description = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='pending')
+    
+    def __init__(self, logID=None, alertType=None, severity=None, description=None, status='pending'):
+        self.logID = logID
+        self.alertType = alertType
+        self.severity = severity
+        self.description = description
+        self.status = status
     
     def __repr__(self):
         return f'<Alert {self.alertID} - {self.alertType} ({self.severity})>'
@@ -209,9 +235,11 @@ class LogProcessor:
                     )
                     
                     db.session.add(alert)
+                    db.session.commit()
                     return
         
         log_entry.status = 'analyzed'
+        db.session.commit()
     
     @staticmethod
     def _determine_severity(threat_type, log_severity):
