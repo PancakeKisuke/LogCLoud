@@ -14,8 +14,8 @@ app = Flask(__name__)
 app.secret_key = 'secret-key-for-session'  # Change this to a random secret key in production
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///logcloud.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db_path = os.getenv('DATABASE_PATH', 'logcloud.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 
 # Initialize database
 db = SQLAlchemy(app)
