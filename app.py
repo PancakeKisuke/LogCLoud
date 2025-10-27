@@ -1,6 +1,6 @@
 # imports
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from flask_scss import Scss
+#from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -21,7 +21,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Compile SCSS
-Scss(app, static_dir='static', asset_dir='static')
+#Scss(app, static_dir='static', asset_dir='static')
   
 # ==================== DATABASE TABLES ====================
 # this section defines the database tables for all my classes
