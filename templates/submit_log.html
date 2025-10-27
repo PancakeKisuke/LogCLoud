@@ -13,7 +13,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+           background: linear-gradient(135deg, #2d1b69 0%, #3730a3 100%);
             min-height: 100vh;
             color: #2d3748;
         }
@@ -303,41 +303,6 @@
                 <button type="submit" class="btn">Process Logs</button>
             </form>
         </div>
-        
-        <div class="examples">
-            <h3>Example Log Formats</h3>
-            
-            <div class="example-item" onclick="copyExample(this)">
-                <div class="label">Syslog - Normal</div>
-                Oct 26 15:30:01 router1 sshd[1234]: Accepted publickey for admin from 192.168.1.100
-            </div>
-            
-            <div class="example-item threat" onclick="copyExample(this)">
-                <div class="label">Syslog - Failed Login</div>
-                Oct 26 15:30:01 router1 sshd[1234]: Failed password for admin from 192.168.1.100
-            </div>
-            
-            <div class="example-item" onclick="copyExample(this)">
-                <div class="label">Apache/Nginx - Success</div>
-                192.168.1.100 - - [26/Oct/2024:15:30:01 +0000] "GET /index.html HTTP/1.1" 200 512
-            </div>
-            
-            <div class="example-item threat" onclick="copyExample(this)">
-                <div class="label">Apache/Nginx - 404 Error</div>
-                192.168.1.100 - - [26/Oct/2024:15:30:01 +0000] "GET /admin HTTP/1.1" 404 512
-            </div>
-            
-            <div class="example-item threat" onclick="copyExample(this)">
-                <div class="label">Windows Event - Failed Login</div>
-                Event ID: 4625, Level: Error, Source: Security, Message: An account failed to log on
-            </div>
-            
-            <div class="example-item threat" onclick="copyExample(this)">
-                <div class="label">Firewall - Blocked Connection</div>
-                iptables: IN=eth0 OUT= SRC=192.168.1.100 DST=10.0.0.1 PROTO=TCP DPT=22 BLOCKED
-            </div>
-        </div>
-    </div>
     
     <script>
         function copyExample(element) {
