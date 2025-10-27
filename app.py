@@ -121,6 +121,7 @@ class Alert(db.Model):
     def __repr__(self):
         return f'<Alert {self.alertID} - {self.alertType} ({self.severity})>' # useful for debugging
 
+
 # ==================== LOGIC CLASSES ====================
 
 class LogCollector:
@@ -803,12 +804,13 @@ def init_db():
             print("Test devices added to the database")
         else:
             print("Devices already exist in the database")
+
+init_db()
+
             
 # ==================== RUN APPLICATION ====================
 
 if __name__ == "__main__":
-    # Initialize database on first run
-    init_db()
-    
+    # Initialize database on first run   
     # Run the app
     app.run(debug=True)
