@@ -619,14 +619,20 @@ def dashboard():
 
 @app.route("/submit_log", methods=['GET', 'POST'])
 def submit_log():
-    """Submit logs manually - paste text or upload file with AUTO device detection"""
+    """Submit logs manually - paste text or upload file"""
     if 'admin_id' not in session:
         flash('Please login first', 'error')
         return redirect(url_for('login'))
     
     if request.method == 'POST':
+        device_id = request.form.get('device_id')
         log_text = request.form.get('log_text', '').strip()
         uploaded_file = request.files.get('log_file')
+        
+        # Validate device selection
+        if not device_id:
+            flash('Please select a device', 'error')
+            return redirect(url_for('submit_log'))
         
         # Get log content from either text input or file
         log_content = None
@@ -646,90 +652,20 @@ def submit_log():
             flash('Please paste log text or upload a file', 'error')
             return redirect(url_for('submit_log'))
         
-        # Process the logs with AUTO device detection
+        # Process the logs
         if log_content:
-            results = process_logs_with_auto_device(log_content)
+            results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
             
             if results['success'] > 0:
                 flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
             if results['failed'] > 0:
                 flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
-            if results['unknown_device'] > 0:
-                flash(f'ℹ️ {results["unknown_device"]} log(s) processed as "Unknown Source"', 'warning')
             
             return redirect(url_for('view_logs'))
     
-    # GET request - show simple form (no device dropdown!)
-    return render_template('submit_log.html')
-
-
-def process_logs_with_auto_device(raw_logs_text):
-    """
-    Process logs and automatically detect which device they came from
-    based on IP addresses or hostnames in the log content
-    """
-    results = {
-        'success': 0,
-        'failed': 0,
-        'unknown_device': 0,
-        'log_entries': [],
-        'errors': []
-    }
-    
-    # Split by newlines and filter empty lines
-    log_lines = [line.strip() for line in raw_logs_text.split('\n') if line.strip()]
-    
-    # Create or get "Unknown Source" device for logs we can't match
-    unknown_device = Device.query.filter_by(deviceName='Unknown Source').first()
-    if not unknown_device:
-        unknown_device = Device(
-            deviceName='Unknown Source',
-            deviceType='other',
-            ipAddress='0.0.0.0',
-            status='active'
-        )
-        db.session.add(unknown_device)
-        db.session.commit()
-    
-    for line in log_lines:
-        try:
-            # Try to extract IP from the log
-            parsed = LogParser.parse_log(line)
-            ip_in_log = parsed.get('ipAddress')
-            
-            # Try to match device by IP
-            device = None
-            if ip_in_log:
-                device = Device.query.filter_by(ipAddress=ip_in_log, status='active').first()
-            
-            # If no match, try to find device name in the log
-            if not device:
-                for dev in Device.query.filter_by(status='active').all():
-                    if dev.deviceName.lower() in line.lower():
-                        device = dev
-                        break
-            
-            # If still no match, use "Unknown Source"
-            if not device:
-                device = unknown_device
-                results['unknown_device'] += 1
-            
-            # Process the log
-            log_entry = LogCollector.collect_log(line, device.deviceID)
-            
-            if log_entry:
-                results['success'] += 1
-                results['log_entries'].append(log_entry)
-            else:
-                results['failed'] += 1
-                results['errors'].append(f"Failed to process: {line[:50]}...")
-                
-        except Exception as e:
-            results['failed'] += 1
-            results['errors'].append(f"Error: {str(e)[:50]}")
-    
-    return results
-
+    # GET request - show form
+    devices = Device.query.all()
+    return render_template('submit_log.html', devices=devices)
 
 @app.route("/view_logs")
 def view_logs():
@@ -843,117 +779,6 @@ def logout():
     session.clear()
     flash('You have been logged out', 'success')
     return redirect(url_for('login'))
-
-# ==================== API ENDPOINT FOR LOG SUBMISSION ====================
-# Add this route to your app.py
-
-@app.route("/api/logs/submit", methods=['POST'])
-def api_submit_log():
-    """
-    API endpoint for devices to submit logs
-    
-    Expected JSON format:
-    {
-        "device_id": 1,
-        "log": "Failed login attempt from 192.168.1.100"
-    }
-    
-    OR with device identification by IP:
-    {
-        "device_ip": "192.168.1.1",
-        "log": "Failed login attempt from 192.168.1.100"
-    }
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return {"error": "No JSON data provided"}, 400
-        
-        # Get the log message
-        raw_log = data.get('log')
-        if not raw_log:
-            return {"error": "Missing 'log' field"}, 400
-        
-        # Find device by ID or IP address
-        device = None
-        
-        if 'device_id' in data:
-            device_id = data.get('device_id')
-            device = Device.query.get(device_id)
-        elif 'device_ip' in data:
-            device_ip = data.get('device_ip')
-            device = Device.query.filter_by(ipAddress=device_ip, status='active').first()
-        
-        if not device:
-            return {"error": "Device not found or inactive"}, 404
-        
-        # Process the log using your existing LogCollector
-        log_entry = LogCollector.collect_log(raw_log, device.deviceID)
-        
-        if log_entry:
-            return {
-                "success": True,
-                "message": "Log received and processed",
-                "log_id": log_entry.LogID,
-                "flagged": log_entry.isFlagged
-            }, 200
-        else:
-            return {"error": "Failed to process log"}, 500
-            
-    except Exception as e:
-        return {"error": str(e)}, 500
-
-
-# Optional: Bulk log submission endpoint
-@app.route("/api/logs/submit_bulk", methods=['POST'])
-def api_submit_bulk_logs():
-    """
-    API endpoint for bulk log submission
-    
-    Expected JSON format:
-    {
-        "device_id": 1,
-        "logs": [
-            "Log entry 1",
-            "Log entry 2",
-            "Log entry 3"
-        ]
-    }
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return {"error": "No JSON data provided"}, 400
-        
-        device_id = data.get('device_id')
-        logs = data.get('logs', [])
-        
-        if not device_id:
-            return {"error": "Missing 'device_id' field"}, 400
-        
-        if not logs or not isinstance(logs, list):
-            return {"error": "Missing or invalid 'logs' field"}, 400
-        
-        # Check if device exists and is active
-        device = Device.query.get(device_id)
-        if not device or device.status != 'active':
-            return {"error": "Device not found or inactive"}, 404
-        
-        # Process logs as bulk text
-        logs_text = '\n'.join(logs)
-        results = BulkLogProcessor.process_bulk_logs(logs_text, device_id)
-        
-        return {
-            "success": True,
-            "message": "Bulk logs processed",
-            "processed": results['success'],
-            "failed": results['failed']
-        }, 200
-        
-    except Exception as e:
-        return {"error": str(e)}, 500
 
 # ==================== DATABASE INITIALIZATION ====================
 
