@@ -13,9 +13,9 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', sans-serif;
-           background: linear-gradient(135deg, #2d1b69 0%, #3730a3 100%);
+            background: linear-gradient(135deg, #354F52 0%, #2F3E46 100%);
             min-height: 100vh;
-            color: #2d3748;
+            color: #2F3E46;
         }
         
         .navbar {
@@ -31,7 +31,7 @@
         .navbar h1 {
             font-size: 1.5rem;
             font-weight: 700;
-            color: #5a67d8;
+            color: #52796F;
         }
         
         .nav-links {
@@ -41,7 +41,7 @@
         }
         
         .nav-link {
-            color: #4a5568;
+            color: #354F52;
             text-decoration: none;
             font-weight: 500;
             font-size: 0.95rem;
@@ -49,11 +49,11 @@
         }
         
         .nav-link:hover {
-            color: #5a67d8;
+            color: #52796F;
         }
         
         .nav-link.active {
-            color: #5a67d8;
+            color: #52796F;
             font-weight: 600;
         }
         
@@ -88,7 +88,7 @@
         
         .card h2 {
             font-size: 1.5rem;
-            color: #2d3748;
+            color: #2F3E46;
             margin-bottom: 0.5rem;
         }
         
@@ -105,14 +105,14 @@
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 600;
-            color: #2d3748;
+            color: #2F3E46;
             font-size: 0.9rem;
         }
         
         select, textarea, input[type="file"] {
             width: 100%;
             padding: 0.75rem;
-            border: 2px solid #e2e8f0;
+            border: 2px solid #84A98C;
             border-radius: 8px;
             font-size: 0.95rem;
             font-family: inherit;
@@ -121,7 +121,7 @@
         
         select:focus, textarea:focus {
             outline: none;
-            border-color: #5a67d8;
+            border-color: #52796F;
         }
         
         textarea {
@@ -133,19 +133,19 @@
         
         input[type="file"] {
             border-style: dashed;
-            background-color: #f7fafc;
+            background-color: #CAD2C5;
             cursor: pointer;
             padding: 1.5rem;
         }
         
         input[type="file"]:hover {
-            border-color: #5a67d8;
-            background-color: #edf2f7;
+            border-color: #52796F;
+            background-color: #84A98C;
         }
         
         .btn {
             padding: 0.875rem 2rem;
-            background: linear-gradient(135deg, #5a67d8, #4c51bf);
+            background: linear-gradient(135deg, #84A98C, #52796F);
             color: white;
             border: none;
             border-radius: 8px;
@@ -157,7 +157,7 @@
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(90, 103, 216, 0.3);
+            box-shadow: 0 8px 16px rgba(82, 121, 111, 0.3);
         }
         
         .alert {
@@ -168,8 +168,8 @@
         }
         
         .alert-success {
-            background: #f0fff4;
-            border-left-color: #48bb78;
+            background: #c6f6d5;
+            border-left-color: #84A98C;
             color: #22543d;
         }
         
@@ -208,13 +208,13 @@
         .divider::after { right: 0; }
         
         .examples {
-            background: #f7fafc;
+            background: #CAD2C5;
             padding: 1.5rem;
             border-radius: 12px;
         }
         
         .examples h3 {
-            color: #2d3748;
+            color: #2F3E46;
             margin-bottom: 1rem;
             font-size: 1.1rem;
         }
@@ -232,7 +232,7 @@
         }
         
         .example-item:hover {
-            border-left-color: #5a67d8;
+            border-left-color: #52796F;
             background: #edf2f7;
             transform: translateX(4px);
         }
@@ -243,7 +243,7 @@
         
         .example-item .label {
             font-weight: 600;
-            color: #2d3748;
+            color: #2F3E46;
             font-family: inherit;
             margin-bottom: 0.5rem;
             font-size: 0.875rem;
@@ -309,7 +309,7 @@
             const text = element.lastChild.textContent.trim();
             navigator.clipboard.writeText(text).then(() => {
                 const originalBg = element.style.backgroundColor;
-                element.style.backgroundColor = '#f0fff4';
+                element.style.backgroundColor = '#c6f6d5';
                 setTimeout(() => {
                     element.style.backgroundColor = originalBg;
                 }, 400);
