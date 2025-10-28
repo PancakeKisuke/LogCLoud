@@ -1,5 +1,5 @@
 # imports
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 #from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -629,43 +629,199 @@ def submit_log():
         log_text = request.form.get('log_text', '').strip()
         uploaded_file = request.files.get('log_file')
         
-        # Validate device selection
-        if not device_id:
-            flash('Please select a device', 'error')
-            return redirect(url_for('submit_log'))
+        # Check if user wants to register a new device
+        register_new_device = request.form.get('register_new_device') == 'yes'
         
-        # Get log content from either text input or file
-        log_content = None
-        
-        if uploaded_file and uploaded_file.filename:
-            # File upload
-            if uploaded_file.filename.endswith(('.log', '.txt')):
-                log_content = uploaded_file.read().decode('utf-8', errors='ignore')
-                flash(f'File "{uploaded_file.filename}" uploaded successfully', 'success')
-            else:
-                flash('Invalid file type. Please upload .log or .txt files', 'error')
+        if register_new_device:
+            # Get new device details
+            new_device_name = request.form.get('new_device_name', '').strip()
+            new_device_type = request.form.get('new_device_type', '').strip()
+            
+            if not new_device_name or not new_device_type:
+                flash('Please provide device name and type', 'error')
                 return redirect(url_for('submit_log'))
-        elif log_text:
-            # Text paste
-            log_content = log_text
-        else:
-            flash('Please paste log text or upload a file', 'error')
-            return redirect(url_for('submit_log'))
+            
+            # Get log content first to extract IP
+            log_content = None
+            if uploaded_file and uploaded_file.filename:
+                if uploaded_file.filename.endswith(('.log', '.txt')):
+                    log_content = uploaded_file.read().decode('utf-8', errors='ignore')
+                else:
+                    flash('Invalid file type. Please upload .log or .txt files', 'error')
+                    return redirect(url_for('submit_log'))
+            elif log_text:
+                log_content = log_text
+            else:
+                flash('Please paste log text or upload a file', 'error')
+                return redirect(url_for('submit_log'))
+            
+            # Extract IP from first log line
+            first_log = log_content.split('\n')[0] if log_content else ''
+            extracted_ip = LogParser._extract_ip(first_log)
+            device_ip = extracted_ip if extracted_ip else 'unknown'
+            
+            # Check if device with this name already exists
+            existing_device = Device.query.filter_by(deviceName=new_device_name).first()
+            if existing_device:
+                flash(f'Device "{new_device_name}" already exists. Using existing device.', 'warning')
+                device_id = existing_device.deviceID
+            else:
+                # Create new device
+                new_device = Device(
+                    deviceName=new_device_name,
+                    deviceType=new_device_type,
+                    ipAddress=device_ip
+                )
+                db.session.add(new_device)
+                db.session.commit()
+                device_id = new_device.deviceID
+                flash(f'✅ New device "{new_device_name}" registered successfully!', 'success')
+            
+            # Process logs with the new device
+            if log_content:
+                results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
+                
+                if results['success'] > 0:
+                    flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
+                if results['failed'] > 0:
+                    flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
+                
+                return redirect(url_for('view_logs'))
         
-        # Process the logs
-        if log_content:
-            results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
+        else:
+            # Existing device flow
+            # Validate device selection
+            if not device_id:
+                flash('Please select a device', 'error')
+                return redirect(url_for('submit_log'))
             
-            if results['success'] > 0:
-                flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
-            if results['failed'] > 0:
-                flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
+            # Get log content from either text input or file
+            log_content = None
             
-            return redirect(url_for('view_logs'))
+            if uploaded_file and uploaded_file.filename:
+                # File upload
+                if uploaded_file.filename.endswith(('.log', '.txt')):
+                    log_content = uploaded_file.read().decode('utf-8', errors='ignore')
+                    flash(f'File "{uploaded_file.filename}" uploaded successfully', 'success')
+                else:
+                    flash('Invalid file type. Please upload .log or .txt files', 'error')
+                    return redirect(url_for('submit_log'))
+            elif log_text:
+                # Text paste
+                log_content = log_text
+            else:
+                flash('Please paste log text or upload a file', 'error')
+                return redirect(url_for('submit_log'))
+            
+            # Process the logs
+            if log_content:
+                results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
+                
+                if results['success'] > 0:
+                    flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
+                if results['failed'] > 0:
+                    flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
+                
+                return redirect(url_for('view_logs'))
     
     # GET request - show form
     devices = Device.query.all()
     return render_template('submit_log.html', devices=devices)
+
+@app.route("/api/ingest", methods=['POST'])
+def api_ingest():
+    """API endpoint for receiving logs from devices
+    
+    Expected JSON format:
+    {
+        "device": {
+            "name": "Router-01",
+            "type": "router",
+            "ip_address": "192.168.1.1"
+        },
+        "logs": [
+            "Error: Connection timeout",
+            "Warning: High CPU usage"
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'error': 'No JSON data provided',
+                'success': False
+            }), 400
+        
+        # Validate required fields
+        if 'device' not in data or 'logs' not in data:
+            return jsonify({
+                'error': 'Missing required fields: device and logs',
+                'success': False
+            }), 400
+        
+        device_info = data['device']
+        logs = data['logs']
+        
+        # Validate device info
+        if 'name' not in device_info:
+            return jsonify({
+                'error': 'Device name is required',
+                'success': False
+            }), 400
+        
+        device_name = device_info['name']
+        device_type = device_info.get('type', 'unknown')
+        device_ip = device_info.get('ip_address', 'unknown')
+        
+        # Validate logs array
+        if not isinstance(logs, list) or len(logs) == 0:
+            return jsonify({
+                'error': 'Logs must be a non-empty array',
+                'success': False
+            }), 400
+        
+        # Find or create device
+        device = Device.query.filter_by(deviceName=device_name).first()
+        
+        if not device:
+            # Auto-register new device
+            device = Device(
+                deviceName=device_name,
+                deviceType=device_type,
+                ipAddress=device_ip
+            )
+            db.session.add(device)
+            db.session.commit()
+            device_registered = True
+        else:
+            device_registered = False
+            # Update device IP if different
+            if device.ipAddress != device_ip and device_ip != 'unknown':
+                device.ipAddress = device_ip
+                db.session.commit()
+        
+        # Process logs
+        logs_text = '\n'.join(logs)
+        results = BulkLogProcessor.process_bulk_logs(logs_text, device.deviceID)
+        
+        return jsonify({
+            'success': True,
+            'device_id': device.deviceID,
+            'device_name': device.deviceName,
+            'device_registered': device_registered,
+            'logs_processed': results['success'],
+            'logs_failed': results['failed'],
+            'message': f'Successfully processed {results["success"]} log(s) from {device_name}'
+        }), 200
+        
+    except Exception as e:
+        print(f"API Error: {e}")
+        return jsonify({
+            'error': f'Internal server error: {str(e)}',
+            'success': False
+        }), 500
 
 @app.route("/view_logs")
 def view_logs():
