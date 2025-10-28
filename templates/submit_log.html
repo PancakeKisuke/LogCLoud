@@ -97,20 +97,6 @@
             margin-bottom: 1.5rem;
         }
         
-        .info-box {
-            background: #CAD2C5;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid #84A98C;
-        }
-        
-        .info-box p {
-            color: #2F3E46;
-            margin: 0;
-            font-size: 0.9rem;
-        }
-        
         .form-group {
             margin-bottom: 1.5rem;
         }
@@ -123,7 +109,7 @@
             font-size: 0.9rem;
         }
         
-        textarea, input[type="file"] {
+        select, textarea, input[type="file"] {
             width: 100%;
             padding: 0.75rem;
             border: 2px solid #84A98C;
@@ -133,13 +119,13 @@
             transition: border-color 0.2s;
         }
         
-        textarea:focus {
+        select:focus, textarea:focus {
             outline: none;
             border-color: #52796F;
         }
         
         textarea {
-            min-height: 250px;
+            min-height: 200px;
             font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
             font-size: 0.875rem;
             resize: vertical;
@@ -220,6 +206,48 @@
         
         .divider::before { left: 0; }
         .divider::after { right: 0; }
+        
+        .examples {
+            background: #CAD2C5;
+            padding: 1.5rem;
+            border-radius: 12px;
+        }
+        
+        .examples h3 {
+            color: #2F3E46;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        
+        .example-item {
+            background: white;
+            padding: 1rem;
+            margin: 0.75rem 0;
+            border-left: 3px solid #cbd5e0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .example-item:hover {
+            border-left-color: #52796F;
+            background: #edf2f7;
+            transform: translateX(4px);
+        }
+        
+        .example-item.threat {
+            border-left-color: #fc8181;
+        }
+        
+        .example-item .label {
+            font-weight: 600;
+            color: #2F3E46;
+            font-family: inherit;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
@@ -230,7 +258,6 @@
             <a href="{{ url_for('submit_log') }}" class="nav-link active">Submit Logs</a>
             <a href="{{ url_for('view_logs') }}" class="nav-link">View Logs</a>
             <a href="{{ url_for('view_alerts') }}" class="nav-link">Alerts</a>
-            <a href="{{ url_for('manage_devices') }}" class="nav-link">Devices</a>
             <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
         </div>
     </nav>
@@ -252,12 +279,18 @@
             
             <form method="POST" enctype="multipart/form-data">
                 <div class="form-group">
+                    <label for="device_id">Source Device *</label>
+                    <select name="device_id" id="device_id" required>
+                        <option value="">Select a device</option>
+                        {% for device in devices %}
+                            <option value="{{ device.deviceID }}">{{ device.deviceName }} ({{ device.deviceType }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
                     <label for="log_text">Paste Log Text</label>
-                    <textarea name="log_text" id="log_text" placeholder="Paste your log entries here (one per line)...
-
-Example:
-Oct 26 15:30:01 router1 sshd[1234]: Failed password for admin from 192.168.1.100
-Oct 26 15:30:15 firewall1 BLOCKED: Port scan from 10.0.0.55"></textarea>
+                    <textarea name="log_text" id="log_text" placeholder="Paste your log entries here (one per line)"></textarea>
                 </div>
                 
                 <div class="divider">OR</div>
@@ -270,6 +303,18 @@ Oct 26 15:30:15 firewall1 BLOCKED: Port scan from 10.0.0.55"></textarea>
                 <button type="submit" class="btn">Process Logs</button>
             </form>
         </div>
-    </div>
+    
+    <script>
+        function copyExample(element) {
+            const text = element.lastChild.textContent.trim();
+            navigator.clipboard.writeText(text).then(() => {
+                const originalBg = element.style.backgroundColor;
+                element.style.backgroundColor = '#c6f6d5';
+                setTimeout(() => {
+                    element.style.backgroundColor = originalBg;
+                }, 400);
+            });
+        }
+    </script>
 </body>
 </html>
