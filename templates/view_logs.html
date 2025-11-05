@@ -241,6 +241,16 @@
                     </div>
                     
                     <div class="filter-group">
+                        <label>Start Date</label>
+                        <input type="date" name="start_date" value="{{ start_date or '' }}">
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label>End Date</label>
+                        <input type="date" name="end_date" value="{{ end_date or '' }}">
+                    </div>
+                    
+                    <div class="filter-group">
                         <label style="display: flex; align-items: center; margin-top: 1.75rem;">
                             <input type="checkbox" name="flagged_only" value="true" {% if flagged_only %}checked{% endif %} style="margin-right: 0.5rem; width: auto;">
                             Flagged Only

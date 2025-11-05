@@ -3,18 +3,18 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 #from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import re
 
 # My webapp
 app = Flask(__name__)
 
-# Secret key for sessions (IMPORTANT)
-app.secret_key = 'secret-key-for-session'  # Change this to a random secret key in production
+# Secret key for sessions
+app.secret_key = 'secret-key-for-session'  
 
-# Database configuration
-# Get database path from environment or use default
+
+# Get database path from environment(used the one in railway app)
 db_path = os.getenv('DATABASE_PATH', 'logcloud.db')
 
 # Create directory if it doesn't exist (for Railway volume)
@@ -131,6 +131,7 @@ class Alert(db.Model):
 
 
 # ==================== LOGIC CLASSES ====================
+#this is the section where the main logic of the app is implemented, the heart of the app
 
 class LogCollector:
     """Class to handle log collection from devices"""
@@ -167,9 +168,9 @@ class LogCollector:
             )
 
             db.session.add(log_entry)
-            db.session.commit()  # now log_entry.LogID is available
-
-            # Process the log (may create alerts, update flags, etc.)
+            db.session.commit()  
+            
+            # Process the log 
             LogProcessor.process_log(log_entry)
 
             return log_entry
@@ -211,6 +212,8 @@ class LogParser:
         
         # Fallback to generic if nothing matches
         return LogParser._parse_generic(raw_log)
+    
+    #DO NOT EDIT OR TOUCH THE PARSERS, VERY IMPORTANT
     
     @staticmethod
     def _parse_syslog(raw_log: str):
@@ -316,7 +319,7 @@ class LogParser:
         - iptables: IN=eth0 OUT= SRC=192.168.1.100 DST=10.0.0.1 PROTO=TCP SPT=54321 DPT=22
         - pfSense: TCP:S SRC=192.168.1.100:12345 DST=10.0.0.1:80 [BLOCKED]
         """
-        # iptables pattern
+        # ip tables pattern
         iptables_pattern = r'SRC=([\d.]+)\s+DST=([\d.]+).*?DPT=(\d+)'
         match = re.search(iptables_pattern, raw_log)
         if match:
@@ -556,6 +559,7 @@ class LogProcessor:
     
 
 # ==================== ROUTES ====================
+# Flask routes for web interface and API
 
 @app.route("/")
 def index():
@@ -675,16 +679,16 @@ def submit_log():
                 db.session.add(new_device)
                 db.session.commit()
                 device_id = new_device.deviceID
-                flash(f'✅ New device "{new_device_name}" registered successfully!', 'success')
+                flash(f' New device "{new_device_name}" registered successfully!', 'success')
             
             # Process logs with the new device
             if log_content:
                 results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
                 
                 if results['success'] > 0:
-                    flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
+                    flash(f' Successfully processed {results["success"]} log(s)', 'success')
                 if results['failed'] > 0:
-                    flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
+                    flash(f' Failed to process {results["failed"]} log(s)', 'warning')
                 
                 return redirect(url_for('view_logs'))
         
@@ -718,9 +722,9 @@ def submit_log():
                 results = BulkLogProcessor.process_bulk_logs(log_content, int(device_id))
                 
                 if results['success'] > 0:
-                    flash(f'✅ Successfully processed {results["success"]} log(s)', 'success')
+                    flash(f' Successfully processed {results["success"]} log(s)', 'success')
                 if results['failed'] > 0:
-                    flash(f'⚠️ Failed to process {results["failed"]} log(s)', 'warning')
+                    flash(f' Failed to process {results["failed"]} log(s)', 'warning')
                 
                 return redirect(url_for('view_logs'))
     
@@ -825,47 +829,94 @@ def api_ingest():
 
 @app.route("/view_logs")
 def view_logs():
-    """View all logs with search and filter"""
+    """View all logs - requires login"""
     if 'admin_id' not in session:
-        flash('Please login first', 'error')
+        flash('Please login to access logs', 'error')
         return redirect(url_for('login'))
     
-    # Get filter parameters
-    search_query: str = request.args.get('search', '').strip()
-    device_id: int | None = request.args.get('device_id', type=int)
-    severity: str = request.args.get('severity', '').strip()
-    flagged_only: bool = request.args.get('flagged_only') == 'true'
+    # Get all logs ordered by timestamp (most recent first)
+    logs = LogEntry.query.order_by(LogEntry.timestamp.desc()).all()
+    devices = Device.query.all()
     
-    # Build query
+    return render_template('view_logs.html', 
+                         logs=logs, 
+                         devices=devices,
+                         search_query='',
+                         selected_device='',
+                         selected_severity='',
+                         flagged_only=False,
+                         start_date='',
+                         end_date='')
+
+
+@app.route("/search_logs", methods=['GET'])
+def search_logs():
+    """Search and filter logs - requires login"""
+    if 'admin_id' not in session:
+        flash('Please login to access logs', 'error')
+        return redirect(url_for('login'))
+    
+    # Get filter parameters from URL
+    search_query = request.args.get('search', '').strip()
+    device_id = request.args.get('device_id', '').strip()
+    severity = request.args.get('severity', '').strip()
+    flagged_only = request.args.get('flagged_only', '') == 'true'
+    start_date = request.args.get('start_date', '').strip()
+    end_date = request.args.get('end_date', '').strip()
+    
+    # Start with base query
     query = LogEntry.query
     
     # Apply filters
     if search_query:
-        query = query.filter(LogEntry.message.contains(search_query))  # type: ignore[arg-type]
+        query = query.filter(LogEntry.message.ilike(f'%{search_query}%'))
     
     if device_id:
-        query = query.filter(LogEntry.sourceDevice == device_id)  # type: ignore[arg-type]
+        query = query.filter(LogEntry.sourceDevice == int(device_id))
     
     if severity:
-        query = query.filter(LogEntry.severity == severity)  # type: ignore[arg-type]
+        query = query.filter(LogEntry.severity == severity)
     
+    # FIXED: Correct boolean comparison for flagged logs
     if flagged_only:
-        # Filter for flagged logs (where isFlagged is True)
-        query = query.filter(LogEntry.isFlagged.is_(True))  # type: ignore[attr-defined]
+        query = query.filter(LogEntry.isFlagged == 1) # type: ignore[arg-type]
     
-    # Get logs ordered by most recent first
+    # DATE RANGE FILTERING - NEW FUNCTIONALITY
+    if start_date:
+        try:
+            # Parse start date and set time to beginning of day (00:00:00)
+            start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+            query = query.filter(LogEntry.timestamp >= start_datetime)
+        except ValueError:
+            flash('Invalid start date format. Please use YYYY-MM-DD', 'error')
+    
+    if end_date:
+        try:
+            # Parse end date and set time to end of day (23:59:59)
+            end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
+            # Add one day and filter by less than to include entire end date
+            end_datetime = end_datetime + timedelta(days=1)
+            query = query.filter(LogEntry.timestamp < end_datetime)
+        except ValueError:
+            flash('Invalid end date format. Please use YYYY-MM-DD', 'error')
+    
+    # Execute query and order by most recent first
     logs = query.order_by(LogEntry.timestamp.desc()).all()
     
-    # Get all devices for filter dropdown
+    # Get all devices for dropdown
     devices = Device.query.all()
     
-    return render_template('view_logs.html', 
+    return render_template('view_logs.html',
                          logs=logs,
                          devices=devices,
                          search_query=search_query,
                          selected_device=device_id,
                          selected_severity=severity,
-                         flagged_only=flagged_only)
+                         flagged_only=flagged_only,
+                         start_date=start_date,
+                         end_date=end_date)
+
+
 
 @app.route("/view_alerts")
 def view_alerts():
@@ -937,6 +988,7 @@ def logout():
     return redirect(url_for('login'))
 
 # ==================== DATABASE INITIALIZATION ====================
+# Create database tables and default admin user on first run, need that for login in
 
 def init_db():
     """Initialize database and create default admin user"""
@@ -969,12 +1021,12 @@ def init_db():
         else:
             print("Devices already exist in the database")
 
-init_db()
+init_db() #initialize the database on first run, reminder that raily has volume that persists the data
 
             
 # ==================== RUN APPLICATION ====================
+# Run the Flask app
 
 if __name__ == "__main__":
-    # Initialize database on first run   
-    # Run the app
+    
     app.run(debug=True)
