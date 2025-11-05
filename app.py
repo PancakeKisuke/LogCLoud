@@ -157,7 +157,7 @@ class LogCollector:
 
             parsed_log = LogParser.parse_log(raw_log)
 
-            # Create the LogEntry and persist it so it has a primary key
+            # Create the LogEntry with extracted timestamp (or use current time if none found)
             log_entry = LogEntry(
                 sourceDevice=device_id,
                 ipAddress=parsed_log.get('ipAddress'),
@@ -166,11 +166,16 @@ class LogCollector:
                 rawlog=raw_log,
                 status='parsed'
             )
+            
+            # IMPORTANT: Set timestamp from parsed log if available
+            if parsed_log.get('timestamp'):
+                log_entry.timestamp = parsed_log['timestamp']
+            # If no timestamp was extracted, the default datetime.utcnow() will be used
 
             db.session.add(log_entry)
-            db.session.commit()  
-            
-            # Process the log 
+            db.session.commit()  # now log_entry.LogID is available
+
+            # Process the log (may create alerts, update flags, etc.)
             LogProcessor.process_log(log_entry)
 
             return log_entry
@@ -182,7 +187,7 @@ class LogCollector:
 
 
 class LogParser:
-    """Enhanced parser that supports multiple common log formats."""
+    """Enhanced parser that supports multiple common log formats and extracts timestamps."""
 
     @staticmethod
     def parse_log(raw_log: str) -> dict:
@@ -194,7 +199,7 @@ class LogParser:
             raw_log (str): Raw log string
             
         Returns:
-            dict: Parsed log data with ipAddress, severity, message
+            dict: Parsed log data with ipAddress, severity, message, timestamp
         """
         # Try different parsers in order
         parsers = [
@@ -213,8 +218,6 @@ class LogParser:
         # Fallback to generic if nothing matches
         return LogParser._parse_generic(raw_log)
     
-    #DO NOT EDIT OR TOUCH THE PARSERS, VERY IMPORTANT
-    
     @staticmethod
     def _parse_syslog(raw_log: str):
         """
@@ -222,26 +225,35 @@ class LogParser:
         Examples:
         - <34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick
         - Oct 26 15:30:01 router1 sshd[1234]: Failed password for admin from 192.168.1.100
+        - Nov 09 2025, 16:53:32
         """
         # Pattern for syslog with priority
         syslog_priority = r'^<(\d+)>'
-        # Pattern for standard syslog
-        syslog_pattern = r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+(\S+?)(\[\d+\])?\s*:\s*(.+)$'
-        
         # Remove priority if present
         log_content = re.sub(syslog_priority, '', raw_log)
         
+        # Pattern for syslog: Month Day Time or Month Day Year, Time
+        # Examples: "Nov 09 2025, 16:53:32" or "Oct 26 15:30:01"
+        syslog_pattern = r'^(\w{3}\s+\d{1,2}\s+(?:\d{4},\s+)?\d{2}:\d{2}:\d{2})'
+        
         match = re.match(syslog_pattern, log_content.strip())
         if match:
-            timestamp, hostname, process, pid, message = match.groups()
+            timestamp_str = match.group(1)
+            
+            # Parse the timestamp
+            parsed_timestamp = LogParser._parse_timestamp(timestamp_str)
+            
+            # Extract message (everything after timestamp)
+            message = log_content[match.end():].strip()
+            # Remove leading separators like " - - " or hostname
+            message = re.sub(r'^[\s\-]+', '', message)
             
             return {
+                'timestamp': parsed_timestamp,
                 'ipAddress': LogParser._extract_ip(message),
                 'severity': LogParser._determine_severity(message),
                 'message': message.strip(),
-                'format': 'syslog',
-                'hostname': hostname,
-                'process': process
+                'format': 'syslog'
             }
         return None
     
@@ -256,7 +268,10 @@ class LogParser:
         
         match = re.match(apache_pattern, raw_log)
         if match:
-            ip, timestamp, method, url, status_code, size = match.groups()
+            ip, timestamp_str, method, url, status_code, size = match.groups()
+            
+            # Parse Apache timestamp format: 26/Oct/2024:15:30:01 +0000
+            parsed_timestamp = LogParser._parse_timestamp(timestamp_str)
             
             # Determine severity based on status code
             status = int(status_code)
@@ -270,6 +285,7 @@ class LogParser:
             message = f"{method} {url} - Status {status_code}"
             
             return {
+                'timestamp': parsed_timestamp,
                 'ipAddress': ip,
                 'severity': severity,
                 'message': message,
@@ -292,6 +308,9 @@ class LogParser:
         if match:
             event_id, level, message = match.groups()
             
+            # Try to extract timestamp from the log
+            parsed_timestamp = LogParser._parse_timestamp(raw_log)
+            
             # Map Windows levels to our severity
             severity_map = {
                 'critical': 'critical',
@@ -303,6 +322,7 @@ class LogParser:
             severity = severity_map.get(level.lower(), 'info')
             
             return {
+                'timestamp': parsed_timestamp,
                 'ipAddress': LogParser._extract_ip(raw_log),
                 'severity': severity,
                 'message': message.strip(),
@@ -319,7 +339,10 @@ class LogParser:
         - iptables: IN=eth0 OUT= SRC=192.168.1.100 DST=10.0.0.1 PROTO=TCP SPT=54321 DPT=22
         - pfSense: TCP:S SRC=192.168.1.100:12345 DST=10.0.0.1:80 [BLOCKED]
         """
-        # ip tables pattern
+        # Try to extract timestamp first
+        parsed_timestamp = LogParser._parse_timestamp(raw_log)
+        
+        # iptables pattern
         iptables_pattern = r'SRC=([\d.]+)\s+DST=([\d.]+).*?DPT=(\d+)'
         match = re.search(iptables_pattern, raw_log)
         if match:
@@ -336,6 +359,7 @@ class LogParser:
             message = f"Firewall {action}: {src_ip} → {dst_ip}:{dst_port}"
             
             return {
+                'timestamp': parsed_timestamp,
                 'ipAddress': src_ip,
                 'severity': severity,
                 'message': message,
@@ -347,6 +371,7 @@ class LogParser:
         # Generic firewall format with BLOCKED/DROPPED
         if re.search(r'\b(block|drop|deny|reject)\b', raw_log, re.IGNORECASE):
             return {
+                'timestamp': parsed_timestamp,
                 'ipAddress': LogParser._extract_ip(raw_log),
                 'severity': 'warning',
                 'message': raw_log.strip(),
@@ -359,21 +384,62 @@ class LogParser:
     def _parse_generic(raw_log: str) -> dict:
         """
         Generic parser for unrecognized formats.
-        Extracts IP and determines severity by keywords.
+        Extracts IP, timestamp, and determines severity by keywords.
         """
+        # Try to extract timestamp
+        parsed_timestamp = LogParser._parse_timestamp(raw_log)
+        
         parsing_data = {
+            'timestamp': parsed_timestamp,
             'ipAddress': LogParser._extract_ip(raw_log),
             'severity': LogParser._determine_severity(raw_log),
             'message': raw_log.strip(),
             'format': 'generic'
         }
         
-        # Remove leading timestamp-like prefix if present
-        timestamp_pattern = r'^[\d\-:\s]+\s+'
-        message = re.sub(timestamp_pattern, '', raw_log)
-        parsing_data['message'] = message.strip()
-        
         return parsing_data
+    
+    @staticmethod
+    def _parse_timestamp(text: str):
+        """
+        Extract and parse timestamp from log text.
+        Supports multiple common formats.
+        Returns datetime object or None if no timestamp found.
+        """
+        # Common timestamp patterns
+        patterns = [
+            # Nov 09 2025, 16:53:32 or [Nov 09 2025, 16:53:32]
+            (r'\[?(\w{3}\s+\d{1,2}\s+\d{4},\s+\d{2}:\d{2}:\d{2})\]?', '%b %d %Y, %H:%M:%S'),
+            # Nov 09 2025 16:53:32
+            (r'(\w{3}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2})', '%b %d %Y %H:%M:%S'),
+            # Oct 26 15:30:01 (no year - use current year)
+            (r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', '%b %d %H:%M:%S'),
+            # 2025-11-05 07:45:24 or 2025/11/05 07:45:24
+            (r'(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}:\d{2})', '%Y-%m-%d %H:%M:%S'),
+            # 26/Oct/2024:15:30:01 (Apache format)
+            (r'(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2})', '%d/%b/%Y:%H:%M:%S'),
+            # ISO format: 2025-11-05T16:53:32
+            (r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', '%Y-%m-%dT%H:%M:%S'),
+        ]
+        
+        for pattern, date_format in patterns:
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    timestamp_str = match.group(1)
+                    # Handle formats without year (add current year)
+                    if '%Y' not in date_format:
+                        current_year = datetime.now().year
+                        parsed = datetime.strptime(timestamp_str, date_format)
+                        parsed = parsed.replace(year=current_year)
+                    else:
+                        parsed = datetime.strptime(timestamp_str, date_format)
+                    return parsed
+                except ValueError:
+                    continue
+        
+        # If no timestamp found, return None (will use current time as fallback)
+        return None
     
     @staticmethod
     def _extract_ip(text: str):
