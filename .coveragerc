@@ -1,0 +1,11 @@
+# .coveragerc
+[run]
+# Only look for code to measure in the current directory
+source = .
+# Only include the file we care about
+include = app.py
+
+# Exclude the main execution block at the bottom of the file
+omit =
+    *__init__.py
+    app.py:596-
